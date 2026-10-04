@@ -1,4 +1,4 @@
-name: Build TáAnotado V15 APK
+name: Build TáAnotado V16 APK
 on:
   workflow_dispatch:
   push:
@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extrair fonte V15
-        run: unzip -q taanotado-v15-build.zip -d full
+      - name: Extrair fonte V16
+        run: unzip -q taanotado-v16-build.zip -d full
       - name: Preparar instalação de teste sem conflito
         run: |
           python3 - <<'PY'
@@ -22,10 +22,10 @@ jobs:
           p=Path('full/capacitor.config.json')
           data=json.loads(p.read_text())
           data['appId']='com.organizae.app.v15'
-          data['appName']='TáAnotado 15'
+          data['appName']='TáAnotado 16'
           p.write_text(json.dumps(data,ensure_ascii=False,indent=2))
           p=Path('full/android/app/src/main/res/values/strings.xml')
-          p.write_text(p.read_text().replace('TáAnotado', 'TáAnotado 15'))
+          p.write_text(p.read_text().replace('TáAnotado 15', 'TáAnotado 16'))
           PY
       - uses: actions/cache@v4
         with:
@@ -53,9 +53,9 @@ jobs:
         working-directory: full/android
         run: gradle assembleDebug
       - name: Preparar arquivo para instalar
-        run: cp full/android/app/build/outputs/apk/debug/app-debug.apk TaAnotado-v15.apk
+        run: cp full/android/app/build/outputs/apk/debug/app-debug.apk TaAnotado-v16.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: TaAnotado-v15-APK
-          path: TaAnotado-v15.apk
+          name: TaAnotado-v16-APK
+          path: TaAnotado-v16.apk
           if-no-files-found: error
