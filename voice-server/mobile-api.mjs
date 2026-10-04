@@ -72,4 +72,4 @@ export class VoiceQuota {
     return new Response(null, { status: accepted ? 200 : 429 });
   }
 }
-export default { fetch: handleMobileRequest };
+export default { fetch: (request, env) => handleMobileRequest(request, env) };
