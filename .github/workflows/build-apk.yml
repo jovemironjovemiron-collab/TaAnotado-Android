@@ -12,6 +12,25 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extrair fonte V15
         run: unzip -q taanotado-v15-build.zip -d full
+      - name: Preparar instalação de teste sem conflito
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('full/android/app/build.gradle')
+          p.write_text(p.read_text().replace('applicationId "com.organizae.app"', 'applicationId "com.organizae.app.v15"'))
+          p=Path('full/capacitor.config.json')
+          data=json.loads(p.read_text())
+          data['appId']='com.organizae.app.v15'
+          data['appName']='TáAnotado 15'
+          p.write_text(json.dumps(data,ensure_ascii=False,indent=2))
+          p=Path('full/android/app/src/main/res/values/strings.xml')
+          p.write_text(p.read_text().replace('TáAnotado', 'TáAnotado 15'))
+          PY
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: taanotado-v15-debug-signing-v1
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
