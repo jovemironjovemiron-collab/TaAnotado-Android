@@ -11,7 +11,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Extrair fonte V17
-        run: unzip -q taanotado-v17-build.zip -d full
+        run: |
+          unzip -q taanotado-v17-build.zip -d full
+          cp voice-server/mobile-api.mjs full/worker/mobile-api.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('full/scripts/prepare-android-web.mjs')
+          p.write_text('\n'.join(line for line in p.read_text().splitlines() if not line.startswith('for (const image')))
+          PY
       - name: Preparar instalação de teste sem conflito
         run: |
           python3 - <<'PY'
