@@ -57,22 +57,6 @@ jobs:
               s=s[:i+1]+add+s[i+1:]
           p.write_text(s)
           PY
-      - name: Garantir pedido runtime de microfone
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          candidates=list(Path('full/android/app/src/main/java').rglob('MainActivity.java'))
-          if not candidates: raise SystemExit('MainActivity.java não encontrado')
-          p=candidates[0]
-          s=p.read_text()
-          if 'Manifest.permission.RECORD_AUDIO' not in s:
-              s=s.replace('import android.os.Bundle;', 'import android.os.Bundle;\\nimport android.Manifest;\\nimport android.content.pm.PackageManager;')
-              needle='super.onCreate(savedInstanceState);'
-              repl=needle+'\\n        if (android.os.Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {\\n            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 901);\\n        }'
-              if needle not in s: raise SystemExit('onCreate não encontrado')
-              s=s.replace(needle,repl,1)
-          p.write_text(s)
-          PY
       - name: Remover chamada a plugin Microphone inexistente
         run: |
           python3 - <<'PY'
