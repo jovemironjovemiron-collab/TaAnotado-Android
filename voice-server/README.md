@@ -13,7 +13,7 @@ Este servidor é para um teste privado compartilhado. Não exige login no ChatGP
 | --- | --- | --- |
 | OPENAI_API_KEY | Secret | Sua chave de API OpenAI, com saldo e acesso aos modelos |
 | VOICE_ACCESS_TOKEN | Secret | Código aleatório privado de pelo menos 32 caracteres, criado por você; use o mesmo código no APK |
-| VOICE_TEST_EXPIRES_AT | Text | Data final em UTC, 14 dias após começar, por exemplo `2026-10-18T17:00:00Z` se começar em 04/10 às 14h de Brasília |
+| VOICE_TEST_EXPIRES_AT | Secret | Data final em UTC, 14 dias após começar, por exemplo `2026-10-18T17:00:00Z` se começar em 04/10 às 14h de Brasília |
 
 5. Salve/publique as mudanças de configuração. Copie a URL HTTPS do Worker, terminada em `.workers.dev`.
 6. Instale o APK 17. Em Mais > Configurações, coloque a URL e o código VOICE_ACCESS_TOKEN. Não coloque a chave OpenAI no celular. Toque em Verificar serviço de áudio e depois em Salvar configurações.

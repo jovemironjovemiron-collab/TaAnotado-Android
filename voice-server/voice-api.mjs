@@ -26,6 +26,19 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 });
 const fail = (code, message, status, transcript) => json({ error: code, message,
   ...(transcript ? { transcript } : {}) }, status);
+async function upstreamFailure(response, fallback, transcript) {
+  if (response.status === 401) return fail("API_KEY_INVALID", "A chave da OpenAI precisa ser corrigida no servidor.", 503, transcript);
+  if (response.status === 403 || response.status === 404)
+    return fail("MODEL_ACCESS_FAILED", "A conta não tem acesso ao modelo configurado. Verifique no servidor.", 503, transcript);
+  if (response.status === 429) {
+    let code = "";
+    try { code = (await response.json()).error?.code || ""; } catch {}
+    return code === "insufficient_quota"
+      ? fail("API_BALANCE_REQUIRED", "A API da OpenAI está sem cota ou saldo. O administrador precisa verificar o faturamento.", 503, transcript)
+      : fail("API_BUSY", "A IA atingiu um limite temporário. Aguarde e tente novamente.", 429, transcript);
+  }
+  return fail(fallback, "O serviço de IA falhou. Sua gravação foi preservada para tentar novamente.", 502, transcript);
+}
 
 export function validateExtraction(raw, transcript) {
   if (!raw || typeof raw !== "object" || !TYPES.every((key) => raw.fields?.[key]))
@@ -105,7 +118,7 @@ export async function processVoiceAudio(request, env, upstream = fetch) {
     });
     if (!stt.ok) {
       console.error("Voice transcription upstream status:", stt.status);
-      return fail("TRANSCRIPTION_FAILED", "A transcrição falhou. Tente novamente.", 502);
+      return upstreamFailure(stt, "TRANSCRIPTION_FAILED");
     }
     const result = await stt.json();
     transcript = typeof result.text === "string" ? result.text.trim() : "";
@@ -126,7 +139,7 @@ export async function processVoiceAudio(request, env, upstream = fetch) {
           schema: EXTRACTION_SCHEMA } }, max_output_tokens: 2400 }),
       signal: AbortSignal.timeout(45_000),
     });
-    if (!analysis.ok) return fail("AI_FAILED", "A IA não conseguiu interpretar o texto.", 502, transcript);
+    if (!analysis.ok) return upstreamFailure(analysis, "AI_FAILED", transcript);
     const response = await analysis.json();
     const output = response.output?.flatMap((item) => item.content || [])
       .find((item) => item.type === "output_text")?.text;
