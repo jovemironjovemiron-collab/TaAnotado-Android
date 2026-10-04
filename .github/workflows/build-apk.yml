@@ -1,4 +1,4 @@
-name: Build APK
+name: Build TáAnotado V12 Completo APK
 on:
   workflow_dispatch:
   push:
@@ -10,15 +10,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Baixar fonte V12 completa
+        run: |
+          python - <<'PY'
+          import urllib.request
+          url='https://drive.usercontent.google.com/download?id=1b35B-gesQ3i_1FS8QrE_2MbteS5yusDl&export=download&confirm=t'
+          urllib.request.urlretrieve(url, 'taanotado-v12.zip')
+          PY
+          unzip -q taanotado-v12.zip -d full
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: full/package-lock.json
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
+      - name: Instalar dependências e gerar web completo
+        working-directory: full
+        run: |
+          npm ci
+          npm run build
+          node scripts/prepare-android-web.mjs
+          npx cap sync android
+      - name: Confirmar imagem e conteúdo
+        working-directory: full
+        run: |
+          test -f public/taanotado-login.png
+          test -f dist-android/taanotado-login.png
+          grep -q "taanotado-login.png" src/main.tsx
+          grep -q "Clientes" src/main.tsx
+          grep -q "Financeiro" src/main.tsx
+          grep -q "Orçamentos" src/main.tsx
+          ! grep -R "chatgpt.site" dist-android android/app/src/main/assets/public
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - run: gradle assembleDebug
+      - name: Gerar APK
+        working-directory: full/android
+        run: gradle assembleDebug
+      - name: Renomear APK
+        run: cp full/android/app/build/outputs/apk/debug/app-debug.apk TaAnotado-V12-COMPLETO.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: TaAnotado-v12-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: TaAnotado-V12-COMPLETO-APK
+          path: TaAnotado-V12-COMPLETO.apk
+          if-no-files-found: error
