@@ -52,7 +52,9 @@ jobs:
           for perm in perms:
               if perm not in s: add += '\\n    <uses-permission android:name="'+perm+'" />'
           if add:
-              i=s.find('>')
+              m=s.find('<manifest')
+              if m < 0: raise SystemExit('AndroidManifest sem tag manifest')
+              i=s.find('>',m)
               if i < 0: raise SystemExit('AndroidManifest inválido')
               s=s[:i+1]+add+s[i+1:]
           p.write_text(s)
