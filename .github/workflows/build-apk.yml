@@ -1,4 +1,4 @@
-name: Build TáAnotado V16 APK
+name: Build TáAnotado V17 APK
 on:
   workflow_dispatch:
   push:
@@ -10,27 +10,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extrair fonte V16
-        run: unzip -q taanotado-v16-build.zip -d full
+      - name: Extrair fonte V17
+        run: unzip -q taanotado-v17-build.zip -d full
       - name: Preparar instalação de teste sem conflito
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import json
           p=Path('full/android/app/build.gradle')
-          p.write_text(p.read_text().replace('applicationId "com.organizae.app"', 'applicationId "com.organizae.app.v15"'))
+          p.write_text(p.read_text().replace('applicationId "com.organizae.app"', 'applicationId "com.organizae.app.v17"'))
           p=Path('full/capacitor.config.json')
           data=json.loads(p.read_text())
-          data['appId']='com.organizae.app.v15'
-          data['appName']='TáAnotado 16'
+          data['appId']='com.organizae.app.v17'
+          data['appName']='TáAnotado 17'
           p.write_text(json.dumps(data,ensure_ascii=False,indent=2))
           p=Path('full/android/app/src/main/res/values/strings.xml')
-          p.write_text(p.read_text().replace('TáAnotado 15', 'TáAnotado 16'))
+          p.write_text(p.read_text().replace('TáAnotado 15', 'TáAnotado 17'))
           PY
       - uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: taanotado-v15-debug-signing-v1
+          path: ~/.android/taanotado-test.keystore
+          key: taanotado-v17-test-signing-v1
+      - name: Garantir assinatura de teste persistente
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/taanotado-test.keystore ]; then
+            keytool -genkeypair -keystore ~/.android/taanotado-test.keystore -storepass android -keypass android -alias androiddebugkey -dname "CN=TaAnotado Test" -keyalg RSA -keysize 2048 -validity 10000
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -53,9 +59,9 @@ jobs:
         working-directory: full/android
         run: gradle assembleDebug
       - name: Preparar arquivo para instalar
-        run: cp full/android/app/build/outputs/apk/debug/app-debug.apk TaAnotado-v16.apk
+        run: cp full/android/app/build/outputs/apk/debug/app-debug.apk TaAnotado-v17.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: TaAnotado-v16-APK
-          path: TaAnotado-v16.apk
+          name: TaAnotado-v17-APK
+          path: TaAnotado-v17.apk
           if-no-files-found: error
