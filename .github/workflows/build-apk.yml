@@ -26,8 +26,10 @@ jobs:
           import json,re
           p=Path('full/android/app/build.gradle')
           s=p.read_text()
-          s,n=re.subn(r'applicationId\\s+["\\\']com\\.organizae\\.app(?:\\.v\\d+)?["\\\']', 'applicationId "com.organizae.app.v19"', s)
-          if n != 1: raise SystemExit(f'applicationId não corrigido: {n}')
+          old=s
+          for src in ['applicationId "com.organizae.app"', "applicationId 'com.organizae.app'", 'applicationId "com.organizae.app.v17"', "applicationId 'com.organizae.app.v17'"]:
+              s=s.replace(src, 'applicationId "com.organizae.app.v19"')
+          if s == old: raise SystemExit('applicationId não encontrado para correção')
           p.write_text(s)
           p=Path('full/capacitor.config.json')
           d=json.loads(p.read_text())
@@ -75,21 +77,18 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
           changed=[]
           for p in Path('full').rglob('*'):
               if not p.is_file() or p.suffix.lower() not in {'.ts','.tsx','.js','.jsx','.mjs'}: continue
               if any(x in p.parts for x in ('node_modules','android','dist','dist-android')): continue
-              try: s=p.read_text()
+              try: txt=p.read_text()
               except UnicodeDecodeError: continue
-              if '.ensurePermission()' not in s: continue
-              old=s
-              s=re.sub(r'if\\s*\\([^{};\\n]*isNativePlatform\\(\\)[^{};\\n]*\\)\\s*\\{\\s*await\\s+[A-Za-z_$][\\w$]*\\.ensurePermission\\(\\)\\s*;?\\s*\\}','',s,flags=re.S)
-              s=re.sub(r'if\\s*\\([^;\\n]*isNativePlatform\\(\\)[^;\\n]*\\)\\s*await\\s+[A-Za-z_$][\\w$]*\\.ensurePermission\\(\\)\\s*;?','',s)
-              if s != old:
-                  p.write_text(s)
-                  changed.append(str(p))
-          if not changed: raise SystemExit('chamada ensurePermission não localizada')
+              if 'Microphone.ensurePermission()' not in txt: continue
+              txt=txt.replace('await Microphone.ensurePermission();','await Promise.resolve();')
+              txt=txt.replace('Microphone.ensurePermission()','Promise.resolve()')
+              p.write_text(txt)
+              changed.append(str(p))
+          if not changed: raise SystemExit('Microphone.ensurePermission não localizado')
           print('Corrigido:', changed)
           PY
       - uses: actions/cache@v4
