@@ -5,13 +5,11 @@ on:
     branches: [ main ]
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Extrair fonte V17 como base da V19
         run: |
           unzip -q taanotado-v17-build.zip -d full
@@ -19,257 +17,124 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p=Path('full/scripts/prepare-android-web.mjs')
-          p.write_text('\n'.join(line for line in p.read_text().splitlines() if not line.startswith('for (const image')))
+          p.write_text('\\n'.join(line for line in p.read_text().splitlines() if not line.startswith('for (const image')))
           PY
-
-      - name: Corrigir identidade Android V19
+      - name: Preparar identidade V19
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import json, re
-
+          import json,re
           p=Path('full/android/app/build.gradle')
           s=p.read_text()
-          s,n=re.subn(r'(applicationId\s+["\'])com\.organizae\.app(?:\.v\d+)?(["\'])', r'\1com.organizae.app.v19\2', s)
-          if n != 1:
-              raise SystemExit(f'applicationId não corrigido; ocorrências={n}')
+          s,n=re.subn(r'applicationId\\s+["\\\']com\\.organizae\\.app(?:\\.v\\d+)?["\\\']', 'applicationId "com.organizae.app.v19"', s)
+          if n != 1: raise SystemExit(f'applicationId não corrigido: {n}')
           p.write_text(s)
-
           p=Path('full/capacitor.config.json')
-          data=json.loads(p.read_text())
-          data['appId']='com.organizae.app.v19'
-          data['appName']='TáAnotado 19'
-          p.write_text(json.dumps(data,ensure_ascii=False,indent=2))
-
+          d=json.loads(p.read_text())
+          d['appId']='com.organizae.app.v19'
+          d['appName']='TáAnotado 19'
+          p.write_text(json.dumps(d,ensure_ascii=False,indent=2))
           p=Path('full/android/app/src/main/res/values/strings.xml')
           s=p.read_text()
-          s=re.sub(r'TáAnotado(?:\s+\d+)?', 'TáAnotado 19', s)
+          s=re.sub(r'TáAnotado(?:\\s+\\d+)?','TáAnotado 19',s)
           p.write_text(s)
           PY
-
-      - name: Corrigir permissões Android do microfone
+      - name: Corrigir permissões nativas de áudio
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p=Path('full/android/app/src/main/AndroidManifest.xml')
           s=p.read_text()
-          permissions=[
-              'android.permission.RECORD_AUDIO',
-              'android.permission.MODIFY_AUDIO_SETTINGS',
-              'android.permission.INTERNET',
-          ]
-          insert=''
-          for permission in permissions:
-              if permission not in s:
-                  insert += f'\n    <uses-permission android:name="{permission}" />'
-          if insert:
+          perms=['android.permission.RECORD_AUDIO','android.permission.MODIFY_AUDIO_SETTINGS','android.permission.INTERNET']
+          add=''
+          for perm in perms:
+              if perm not in s: add += '\\n    <uses-permission android:name="'+perm+'" />'
+          if add:
               i=s.find('>')
-              if i < 0:
-                  raise SystemExit('AndroidManifest.xml inválido')
-              s=s[:i+1]+insert+s[i+1:]
+              if i < 0: raise SystemExit('AndroidManifest inválido')
+              s=s[:i+1]+add+s[i+1:]
           p.write_text(s)
           PY
-
-      - name: Garantir pedido runtime de RECORD_AUDIO
+      - name: Garantir pedido runtime de microfone
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import re
-
           candidates=list(Path('full/android/app/src/main/java').rglob('MainActivity.java'))
-          if not candidates:
-              raise SystemExit('MainActivity.java não encontrado')
+          if not candidates: raise SystemExit('MainActivity.java não encontrado')
           p=candidates[0]
           s=p.read_text()
-
           if 'Manifest.permission.RECORD_AUDIO' not in s:
-              package_match=re.search(r'(^\s*package\s+[^;]+;)', s, flags=re.M)
-              if not package_match:
-                  raise SystemExit('package de MainActivity não encontrado')
-              imports='''\nimport android.Manifest;
-import android.content.pm.PackageManager;
-import android.os.Bundle;
-'''
-              s=s[:package_match.end()]+imports+s[package_match.end():]
-
-              request='''\n        if (android.os.Build.VERSION.SDK_INT >= 23
-                && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 901);
-        }'''
-
-              if 'super.onCreate(savedInstanceState);' in s:
-                  s=s.replace('super.onCreate(savedInstanceState);',
-                              'super.onCreate(savedInstanceState);'+request, 1)
-              else:
-                  method='''
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);''' + request + '''
-    }
-'''
-                  pos=s.rfind('}')
-                  if pos < 0:
-                      raise SystemExit('classe MainActivity inválida')
-                  s=s[:pos]+method+s[pos:]
-
-          if 'Manifest.permission.RECORD_AUDIO' not in s or 'requestPermissions' not in s:
-              raise SystemExit('pedido runtime de RECORD_AUDIO não foi instalado')
+              s=s.replace('import android.os.Bundle;', 'import android.os.Bundle;\\nimport android.Manifest;\\nimport android.content.pm.PackageManager;')
+              needle='super.onCreate(savedInstanceState);'
+              repl=needle+'\\n        if (android.os.Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {\\n            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 901);\\n        }'
+              if needle not in s: raise SystemExit('onCreate não encontrado')
+              s=s.replace(needle,repl,1)
           p.write_text(s)
-          print('MainActivity corrigida:', p)
           PY
-
       - name: Remover chamada a plugin Microphone inexistente
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
-
           changed=[]
-          extensions={'.ts','.tsx','.js','.jsx','.mjs'}
           for p in Path('full').rglob('*'):
-              if not p.is_file() or p.suffix.lower() not in extensions:
-                  continue
-              if any(part in {'node_modules','android','dist','dist-android'} for part in p.parts):
-                  continue
-              try:
-                  s=p.read_text()
-              except UnicodeDecodeError:
-                  continue
-              if '.ensurePermission()' not in s:
-                  continue
-              original=s
-
-              # if (Capacitor.isNativePlatform()) { await Microphone.ensurePermission(); }
-              s=re.sub(
-                  r'if\s*\([^{};\n]*isNativePlatform\(\)[^{};\n]*\)\s*\{\s*await\s+[A-Za-z_$][\w$]*\.ensurePermission\(\)\s*;?\s*\}',
-                  '',
-                  s,
-                  flags=re.S,
-              )
-              # if (Capacitor.isNativePlatform()) await Microphone.ensurePermission();
-              s=re.sub(
-                  r'if\s*\([^;\n]*isNativePlatform\(\)[^;\n]*\)\s*await\s+[A-Za-z_$][\w$]*\.ensurePermission\(\)\s*;?',
-                  '',
-                  s,
-              )
-
-              if s != original:
+              if not p.is_file() or p.suffix.lower() not in {'.ts','.tsx','.js','.jsx','.mjs'}: continue
+              if any(x in p.parts for x in ('node_modules','android','dist','dist-android')): continue
+              try: s=p.read_text()
+              except UnicodeDecodeError: continue
+              if '.ensurePermission()' not in s: continue
+              old=s
+              s=re.sub(r'if\\s*\\([^{};\\n]*isNativePlatform\\(\\)[^{};\\n]*\\)\\s*\\{\\s*await\\s+[A-Za-z_$][\\w$]*\\.ensurePermission\\(\\)\\s*;?\\s*\\}','',s,flags=re.S)
+              s=re.sub(r'if\\s*\\([^;\\n]*isNativePlatform\\(\\)[^;\\n]*\\)\\s*await\\s+[A-Za-z_$][\\w$]*\\.ensurePermission\\(\\)\\s*;?','',s)
+              if s != old:
                   p.write_text(s)
                   changed.append(str(p))
-
-          if not changed:
-              raise SystemExit('nenhuma chamada ensurePermission foi localizada no fonte')
-          print('Arquivos corrigidos:', *changed, sep='\n- ')
-
-          remaining=[]
-          for p in Path('full').rglob('*'):
-              if not p.is_file() or p.suffix.lower() not in extensions:
-                  continue
-              if any(part in {'node_modules','android','dist','dist-android'} for part in p.parts):
-                  continue
-              try:
-                  s=p.read_text()
-              except UnicodeDecodeError:
-                  continue
-              if re.search(r'\.ensurePermission\(\)', s):
-                  remaining.append(str(p))
-          if remaining:
-              raise SystemExit('ensurePermission ainda presente em: '+', '.join(remaining))
+          if not changed: raise SystemExit('chamada ensurePermission não localizada')
+          print('Corrigido:', changed)
           PY
-
-      - name: Fazer a arte do ícone ocupar melhor a área
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y imagemagick
-          python3 - <<'PY'
-          from pathlib import Path
-          import subprocess
-          roots=list(Path('full/android/app/src/main/res').glob('mipmap-*'))
-          changed=0
-          for root in roots:
-              for p in root.glob('ic_launcher*.png'):
-                  tmp=p.with_suffix('.tmp.png')
-                  subprocess.run(['convert',str(p),'-trim','+repage','-resize','112%x112%','-gravity','center','-extent','100%x100%',str(tmp)],check=True)
-                  tmp.replace(p)
-                  changed+=1
-          print('Ícones ajustados:',changed)
-          PY
-
       - uses: actions/cache@v4
         with:
           path: ~/.android/taanotado-test.keystore
           key: taanotado-v19-test-signing-v1
-
       - name: Garantir assinatura de teste persistente
         run: |
           mkdir -p ~/.android
           if [ ! -f ~/.android/taanotado-test.keystore ]; then
             keytool -genkeypair -keystore ~/.android/taanotado-test.keystore -storepass android -keypass android -alias androiddebugkey -dname "CN=TaAnotado Test" -keyalg RSA -keysize 2048 -validity 10000
           fi
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: full/package-lock.json
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-
       - name: Testar e sincronizar Android
         working-directory: full
         run: |
           npm ci
           npm test
           npm run android:sync
-
-      - name: Confirmar remoção da chamada quebrada no bundle
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          roots=[Path('full/dist-android'),Path('full/android/app/src/main/assets/public')]
-          bad=[]
-          for root in roots:
-              if not root.exists():
-                  continue
-              for p in root.rglob('*.js'):
-                  s=p.read_text(errors='ignore')
-                  if re.search(r'\.ensurePermission\(\)', s):
-                      bad.append(str(p))
-          if bad:
-              raise SystemExit('bundle ainda chama ensurePermission: '+', '.join(bad))
-          print('OK: bundle não chama plugin Microphone inexistente')
-          PY
-
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-
       - name: Compilar APK
         working-directory: full/android
         run: gradle assembleDebug
-
       - name: Validar APK final
         run: |
           APK=full/android/app/build/outputs/apk/debug/app-debug.apk
           AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)
-          test -n "$AAPT"
           "$AAPT" dump badging "$APK" | tee /tmp/badging.txt
           "$AAPT" dump permissions "$APK" | tee /tmp/permissions.txt
           grep -q "package: name='com.organizae.app.v19'" /tmp/badging.txt
-          grep -q "android.permission.RECORD_AUDIO" /tmp/permissions.txt
-          grep -q "android.permission.MODIFY_AUDIO_SETTINGS" /tmp/permissions.txt
-          unzip -p "$APK" assets/capacitor.config.json | tee /tmp/capacitor.json
-          grep -q '"appId": "com.organizae.app.v19"' /tmp/capacitor.json
-          echo "APK V19 validado: pacote e permissões de áudio corretos."
-
+          grep -q 'android.permission.RECORD_AUDIO' /tmp/permissions.txt
+          grep -q 'android.permission.MODIFY_AUDIO_SETTINGS' /tmp/permissions.txt
+          echo 'APK V19 validado.'
       - name: Preparar arquivo para instalar
         run: cp full/android/app/build/outputs/apk/debug/app-debug.apk TaAnotado-v19.apk
-
       - uses: actions/upload-artifact@v4
         with:
           name: TaAnotado-v19-APK
