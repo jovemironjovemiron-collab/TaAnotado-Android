@@ -10,48 +10,65 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Baixar fonte V12 completa
+
+      - name: Baixar fonte V12 completa do Drive
         run: |
+          python -m pip install --disable-pip-version-check -q gdown
+          gdown --id 1b35B-gesQ3i_1FS8QrE_2MbteS5yusDl -O taanotado-v12.zip
           python - <<'PY'
-          import urllib.request
-          url='https://drive.usercontent.google.com/download?id=1b35B-gesQ3i_1FS8QrE_2MbteS5yusDl&export=download&confirm=t'
-          urllib.request.urlretrieve(url, 'taanotado-v12.zip')
+          import zipfile
+          p='taanotado-v12.zip'
+          assert zipfile.is_zipfile(p), 'O arquivo baixado não é um ZIP válido'
+          with zipfile.ZipFile(p) as z:
+              z.extractall('full')
           PY
-          unzip -q taanotado-v12.zip -d full
+          test -f full/package.json
+          test -f full/src/main.tsx
+          test -f full/public/taanotado-login.png
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
           cache-dependency-path: full/package-lock.json
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-      - name: Instalar dependências e gerar web completo
+
+      - name: Instalar dependências e gerar conteúdo completo
         working-directory: full
         run: |
           npm ci
           npm run build
           node scripts/prepare-android-web.mjs
+          cp public/taanotado-login.png dist-android/taanotado-login.png
           npx cap sync android
-      - name: Confirmar imagem e conteúdo
+
+      - name: Confirmar imagem e módulos do TáAnotado
         working-directory: full
         run: |
-          test -f public/taanotado-login.png
           test -f dist-android/taanotado-login.png
+          test -f android/app/src/main/assets/public/taanotado-login.png
           grep -q "taanotado-login.png" src/main.tsx
           grep -q "Clientes" src/main.tsx
+          grep -q "Serviços" src/main.tsx
           grep -q "Financeiro" src/main.tsx
           grep -q "Orçamentos" src/main.tsx
           ! grep -R "chatgpt.site" dist-android android/app/src/main/assets/public
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Gerar APK
+
+      - name: Gerar APK completo
         working-directory: full/android
         run: gradle assembleDebug
-      - name: Renomear APK
+
+      - name: Preparar APK instalável
         run: cp full/android/app/build/outputs/apk/debug/app-debug.apk TaAnotado-V12-COMPLETO.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: TaAnotado-V12-COMPLETO-APK
