@@ -1,4 +1,4 @@
-name: Build TáAnotado V17 APK
+name: Build TáAnotado V18 APK
 on:
   workflow_dispatch:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extrair fonte V17
+      - name: Extrair fonte V17 como base da V18
         run: |
           unzip -q taanotado-v17-build.zip -d full
           cp voice-server/mobile-api.mjs full/worker/mobile-api.mjs
@@ -19,25 +19,73 @@ jobs:
           p=Path('full/scripts/prepare-android-web.mjs')
           p.write_text('\n'.join(line for line in p.read_text().splitlines() if not line.startswith('for (const image')))
           PY
-      - name: Preparar instalação de teste sem conflito
+      - name: Preparar identidade V18
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import json
           p=Path('full/android/app/build.gradle')
-          p.write_text(p.read_text().replace('applicationId "com.organizae.app"', 'applicationId "com.organizae.app.v17"'))
+          p.write_text(p.read_text().replace('applicationId "com.organizae.app"', 'applicationId "com.organizae.app.v18"'))
           p=Path('full/capacitor.config.json')
           data=json.loads(p.read_text())
-          data['appId']='com.organizae.app.v17'
-          data['appName']='TáAnotado 17'
+          data['appId']='com.organizae.app.v18'
+          data['appName']='TáAnotado 18'
           p.write_text(json.dumps(data,ensure_ascii=False,indent=2))
           p=Path('full/android/app/src/main/res/values/strings.xml')
-          p.write_text(p.read_text().replace('TáAnotado 15', 'TáAnotado 17'))
+          s=p.read_text()
+          s=s.replace('TáAnotado 15','TáAnotado 18').replace('TáAnotado 17','TáAnotado 18')
+          p.write_text(s)
+          PY
+      - name: Corrigir permissão nativa do microfone
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('full/android/app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          if 'android.permission.RECORD_AUDIO' not in s:
+              s=s.replace('<manifest ', '<manifest ')
+              marker='>'
+              i=s.find(marker)
+              s=s[:i+1]+'\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />'+s[i+1:]
+          p.write_text(s)
+          PY
+      - name: Garantir pedido de microfone em tempo de execução
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          candidates=list(Path('full/android/app/src/main/java').rglob('MainActivity.java'))
+          if not candidates:
+              raise SystemExit('MainActivity.java não encontrado')
+          p=candidates[0]
+          s=p.read_text()
+          if 'Manifest.permission.RECORD_AUDIO' not in s:
+              s=s.replace('import android.os.Bundle;', 'import android.os.Bundle;\nimport android.Manifest;\nimport android.content.pm.PackageManager;\nimport androidx.core.app.ActivityCompat;\nimport androidx.core.content.ContextCompat;')
+              needle='super.onCreate(savedInstanceState);'
+              repl=needle+'\n        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {\n            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, 901);\n        }'
+              s=s.replace(needle,repl)
+          p.write_text(s)
+          print('MainActivity corrigida:',p)
+          PY
+      - name: Fazer a arte do ícone ocupar melhor a área
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y imagemagick
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          roots=list(Path('full/android/app/src/main/res').glob('mipmap-*'))
+          changed=0
+          for root in roots:
+              for p in root.glob('ic_launcher*.png'):
+                  tmp=p.with_suffix('.tmp.png')
+                  subprocess.run(['convert',str(p),'-trim','+repage','-resize','112%x112%','-gravity','center','-extent','100%x100%',str(tmp)],check=True)
+                  tmp.replace(p); changed+=1
+          print('Ícones ajustados:',changed)
           PY
       - uses: actions/cache@v4
         with:
           path: ~/.android/taanotado-test.keystore
-          key: taanotado-v17-test-signing-v1
+          key: taanotado-v18-test-signing-v1
       - name: Garantir assinatura de teste persistente
         run: |
           mkdir -p ~/.android
@@ -66,9 +114,9 @@ jobs:
         working-directory: full/android
         run: gradle assembleDebug
       - name: Preparar arquivo para instalar
-        run: cp full/android/app/build/outputs/apk/debug/app-debug.apk TaAnotado-v17.apk
+        run: cp full/android/app/build/outputs/apk/debug/app-debug.apk TaAnotado-v18.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: TaAnotado-v17-APK
-          path: TaAnotado-v17.apk
+          name: TaAnotado-v18-APK
+          path: TaAnotado-v18.apk
           if-no-files-found: error
