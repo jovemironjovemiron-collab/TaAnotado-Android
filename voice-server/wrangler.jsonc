@@ -1,0 +1,26 @@
+{
+  "name": "taanotado-audio",
+  "main": "mobile-api.mjs",
+  "compatibility_date": "2026-10-04",
+  "vars": {
+    "TRANSCRIPTION_MODEL": "gpt-transcribe",
+    "ORGANIZATION_MODEL": "gpt-5.6-terra",
+    "VOICE_DAILY_LIMIT": "30"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "VOICE_QUOTA",
+        "class_name": "VoiceQuota"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "VoiceQuota"
+      ]
+    }
+  ]
+}
